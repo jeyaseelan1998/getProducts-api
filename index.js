@@ -1,32 +1,35 @@
-const express = require('express');
-const sqlite3 = require('sqlite3');
-const { open } = require('sqlite');
-const path = require('path');
-const fetch = require('node-fetch')
+const express = require("express");
+const sqlite3 = require("sqlite3");
+const { open } = require("sqlite");
+const path = require("path");
+const fetch = require("node-fetch");
 
 const app = express();
 let db = null;
 
-const dbPath = path.join(__dirname, './products.db')
+const dbPath = path.join(__dirname, "./products.db");
+const PORT = process.env.PORT || 3000;
 
 const initializeAndCreateDB = async () => {
-    try {
-        db = await open({
-            filename: dbPath,
-            driver: sqlite3.Database
-        })
-        app.listen(3000, () => console.log('Server started at http://localhost:3000'))
-    } catch (error) {
-        console.log(error);
-        process.exit(1);
-    }
-}
+  try {
+    db = await open({
+      filename: dbPath,
+      driver: sqlite3.Database,
+    });
+    app.listen(PORT, () =>
+      console.log("Server started at http://localhost:3000")
+    );
+  } catch (error) {
+    console.log(error);
+    process.exit(1);
+  }
+};
 
-initializeAndCreateDB()
+initializeAndCreateDB();
 
-const createProductTable = async data => {
-    try {
-        const createTableQuery = `
+const createProductTable = async (data) => {
+  try {
+    const createTableQuery = `
         CREATE TABLE product(
             id NOT NULL PRIMARY KEY,
             title TEXT,
@@ -37,9 +40,10 @@ const createProductTable = async data => {
             sold  BOOLEAN,
             date_of_sale  DATETIME
         );`;
-        await db.run(createTableQuery)
+    await db.run(createTableQuery);
 
-        const insertValuesQuery = `INSERT INTO product (
+    const insertValuesQuery =
+      `INSERT INTO product (
             id,
             title,
             price,
@@ -48,32 +52,38 @@ const createProductTable = async data => {
             image,
             sold,
             date_of_sale
-        ) VALUES ` + data.map(product =>
+        ) VALUES ` +
+      data
+        .map(
+          (product) =>
             `(${product.id}, "${product.title}", ${product.price}, "${product.description}", "${product.category}", "${product.image}", ${product.sold}, "${product.dateOfSale}")`
-        ).join(', ') + " ;"
+        )
+        .join(", ") +
+      " ;";
 
-        await db.run(insertValuesQuery)
-    } catch (error) {
-        console.log('Product table already exists')
-    }
-}
+    await db.run(insertValuesQuery);
+  } catch (error) {
+    console.log("Product table already exists");
+  }
+};
 
 //create products table
 app.get("/", async (request, response) => {
-    const apiUrl = "https://s3.amazonaws.com/roxiler.com/product_transaction.json";
-    const options = { method: "GET" };
-    const apiResponse = await fetch(apiUrl, options)
-    const data = await apiResponse.json()
+  const apiUrl =
+    "https://s3.amazonaws.com/roxiler.com/product_transaction.json";
+  const options = { method: "GET" };
+  const apiResponse = await fetch(apiUrl, options);
+  const data = await apiResponse.json();
 
-    await createProductTable(data)
+  await createProductTable(data);
 
-    const SQLQUERY = `SELECT * from product;`
-    let dbResponse = await db.all(SQLQUERY)
-    response.send(dbResponse)
-})
+  const SQLQUERY = `SELECT * from product;`;
+  let dbResponse = await db.all(SQLQUERY);
+  response.send(dbResponse);
+});
 
 const getStatisticsOfGivenMonth = async (month) => {
-    const soldProductsCountQuery = `
+  const soldProductsCountQuery = `
         SELECT 
         SUM(
             CASE 
@@ -94,18 +104,18 @@ const getStatisticsOfGivenMonth = async (month) => {
         FROM product
         WHERE CAST(strftime('%m', date_of_sale) AS INT) = ${month};
     `;
-    const dbResponse = await db.get(soldProductsCountQuery)
-    return dbResponse
-}
+  const dbResponse = await db.get(soldProductsCountQuery);
+  return dbResponse;
+};
 
 app.get("/statistics/:monthId", async (request, response) => {
-    const {monthId} = request.params
-    const dbResponse = await getStatisticsOfGivenMonth(monthId)
-    response.send(dbResponse)
-})
+  const { monthId } = request.params;
+  const dbResponse = await getStatisticsOfGivenMonth(monthId);
+  response.send(dbResponse);
+});
 
 const getBarchartDataForGivenMonth = async (month) => {
-    const soldProductsCountQuery = `
+  const soldProductsCountQuery = `
         SELECT 
         COUNT(
             CASE 
@@ -160,43 +170,41 @@ const getBarchartDataForGivenMonth = async (month) => {
         FROM product
         WHERE CAST(strftime('%m', date_of_sale) AS INT) = ${month};
     `;
-    const dbResponse = await db.get(soldProductsCountQuery)
-    return dbResponse
-}
+  const dbResponse = await db.get(soldProductsCountQuery);
+  return dbResponse;
+};
 
 app.get("/bar-chart/:monthId", async (request, response) => {
-    const {monthId} = request.params
-    const dbResponse = await getBarchartDataForGivenMonth(monthId)
-    response.send(dbResponse)
-})
+  const { monthId } = request.params;
+  const dbResponse = await getBarchartDataForGivenMonth(monthId);
+  response.send(dbResponse);
+});
 
 const getPieChartOfGivenMonth = async (month) => {
-    const getPieChartQuery = `
+  const getPieChartQuery = `
         SELECT 
         category, count() as no_of_item
         FROM product
         WHERE CAST(strftime('%m', date_of_sale) AS INT) = ${month}
         GROUP BY category;
     `;
-    const dbResponse = await db.all(getPieChartQuery)
-    return dbResponse
-}
+  const dbResponse = await db.all(getPieChartQuery);
+  return dbResponse;
+};
 
 app.get("/pie-chart/:monthId", async (request, response) => {
-    const {monthId} = request.params
-    const dbResponse = await getPieChartOfGivenMonth(monthId)
-    response.send(dbResponse)
-})
-
+  const { monthId } = request.params;
+  const dbResponse = await getPieChartOfGivenMonth(monthId);
+  response.send(dbResponse);
+});
 
 app.get("/all-data/:monthId", async (request, response) => {
-    const {monthId} = request.params
-    const statisticsData = await getStatisticsOfGivenMonth(monthId)
-    const barChartData = await getBarchartDataForGivenMonth(monthId)
-    const pieCartData = await getPieChartOfGivenMonth(monthId)
+  const { monthId } = request.params;
+  const statisticsData = await getStatisticsOfGivenMonth(monthId);
+  const barChartData = await getBarchartDataForGivenMonth(monthId);
+  const pieCartData = await getPieChartOfGivenMonth(monthId);
 
-    const formatedData = {statisticsData, barChartData, pieCartData}
+  const formatedData = { statisticsData, barChartData, pieCartData };
 
-    response.send(formatedData)
-
-})
+  response.send(formatedData);
+});
